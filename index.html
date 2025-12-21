@@ -303,7 +303,7 @@
 
         async function fetchWeatherForecasts() {
             const promises = LOCATIONS.map(async loc => {
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&days=5`;
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&forecast_days=5`;
                 const res = await fetch(url);
                 if (!res.ok) throw new Error(`Weather API failed for ${loc.name}`);
                 return await res.json();
