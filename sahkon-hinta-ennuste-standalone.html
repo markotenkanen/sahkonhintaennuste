@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="fi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pörssisähkön keskihinnan ennuste</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-color: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.2);
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --danger: #f87171;
+            --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff 0%, var(--accent-color) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .date {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .weekday {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .price-container {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 1.5rem 0;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.5rem;
+        }
+
+        .price-value {
+            font-size: 3.5rem;
+            font-weight: 800;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .price-unit {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .footer {
+            margin-top: 4rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-align: center;
+            max-width: 600px;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+            grid-column: 1 / -1;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+        }
+
+        /* Price Colors */
+        .price-low {
+            color: var(--success);
+        }
+
+        .price-mid {
+            color: var(--warning);
+        }
+
+        .price-high {
+            color: var(--danger);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Pörssisähkön keskihinnan ennuste</h1>
+        <div class="subtitle">Ennuste perustuen Fingridin tuulivoimaennusteeseen</div>
+        <div id="api-key-container" style="margin-top: 1rem;">
+            <input type="password" id="api-key" placeholder="Fingrid API Key"
+                style="padding: 0.5rem; border-radius: 4px; border: 1px solid #ccc; width: 250px;">
+            <button id="save-key"
+                style="padding: 0.5rem 1rem; background: var(--accent-color); border: none; border-radius: 4px; color: white; cursor: pointer;">Tallenna</button>
+        </div>
+    </header>
+
+    <main id="cards-container" class="grid-container">
+        <!-- Cards will be injected here -->
+    </main>
+
+    <footer class="footer">
+        <p>Ennuste perustuu historialliseen dataan hinnoista, tuulesta ja lämpötilasta (Helsinki, Tampere, Oulu).</p>
+        <p>Malli: Hinta laskee epälineaarisesti tuulivoiman kasvaessa.</p>
+        <button id="download-data"
+            style="margin-top: 1rem; padding: 0.5rem; background: #334155; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Lataa
+            kerätty data (CSV)</button>
+    </footer>
+
+    <script>
+        // Constants
+        const FINGRID_API_URL = 'https://data.fingrid.fi/api/datasets/245/data'; // 245 = Wind Power Forecast
+        const LOCATIONS = [
+            { name: "Helsinki", lat: 60.1695, lon: 24.9354 },
+            { name: "Tampere", lat: 61.498, lon: 23.7608 },
+            { name: "Oulu", lat: 65.0126, lon: 25.4715 }
+        ];
+
+        let apiKey = localStorage.getItem('fingrid_api_key') || '';
+
+        // Model based on heuristics (Refined 15.12.2025 Phase 2 + Weekend Adj)
+        // Target: 4000MW -> 4.2 snt. 2300MW -> 11.0 snt.
+        // Weekends: significant reduction in demand/price.
+        const MODEL = {
+            base_price: 5.97,
+            coeff_wind_power: 0.00048,
+            coeff_temp: 0.53,
+            floor_price: -1.0,
+            coeff_weekend_sat: 0.0,
+            coeff_weekend_sun: 0.0
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const keyInput = document.getElementById('api-key');
+            if (apiKey) {
+                keyInput.value = apiKey;
+                init();
+            }
+
+            document.getElementById('save-key').addEventListener('click', () => {
+                const val = keyInput.value.trim();
+                if (val) {
+                    apiKey = val;
+                    localStorage.setItem('fingrid_api_key', val);
+                    init();
+                }
+            });
+
+            document.getElementById('download-data').addEventListener('click', downloadLoggedData);
+
+            updateDownloadButtonText();
+        });
+
+        function updateDownloadButtonText() {
+            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            const btn = document.getElementById('download-data');
+            if (btn) btn.textContent = `Lataa kerätty data (CSV) - ${history.length} riviä`;
+        }
+
+        async function init() {
+            const container = document.getElementById('cards-container');
+            container.innerHTML = '<div class="loading">Ladataan tietoja (Fingrid & OpenMeteo)...</div>';
+
+            if (!apiKey) {
+                container.innerHTML = '<div class="loading" style="color:var(--warning)">Syötä Fingrid API-avain yllä olevaan kenttään nähdäksesi ennusteen.</div>';
+                return;
+            }
+
+            try {
+                const [windData, weatherData, realizedData] = await Promise.all([
+                    fetchFingridWindForecast(),
+                    fetchWeatherForecasts(),
+                    fetchRealizedData()
+                ]);
+
+                const merged = mergeData(windData, weatherData);
+
+                if (realizedData) {
+                    logData(realizedData);
+                }
+
+                renderCards(merged);
+
+            } catch (error) {
+                console.error(error);
+                if (error.message.includes('401') || error.message.includes('403')) {
+                    container.innerHTML = `<div class="loading" style="color:var(--danger)">Virhe: API-avain ei toimi (401/403). Tarkista avain.</div>`;
+                } else {
+                    container.innerHTML = `<div class="loading" style="color:var(--danger)">Virhe tietojen latauksessa: ${error.message}</div>`;
+                }
+            }
+        }
+
+        async function fetchFingridWindForecast() {
+            const now = new Date();
+            const startTime = now.toISOString();
+            const endTime = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
+            const url = `${FINGRID_API_URL}?startTime=${startTime}&endTime=${endTime}&pageSize=200`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+
+            const res = await fetch(proxyUrl, { headers: { 'x-api-key': apiKey } });
+            if (!res.ok) throw new Error(`Fingrid API Error: ${res.status}`);
+            return await res.json();
+        }
+
+        async function fetchWeatherForecasts() {
+            const promises = LOCATIONS.map(async loc => {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&days=5`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`Weather API failed for ${loc.name}`);
+                return await res.json();
+            });
+            return Promise.all(promises);
+        }
+
+        async function fetchRealizedData() {
+            try {
+                const now = new Date();
+                const start = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+                const end = now.toISOString();
+
+                // Use CORS Proxy for Elering too
+                const targetUrl = `https://dashboard.elering.ee/api/nps/price?start=${start}&end=${end}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+                const priceRes = await fetch(proxyUrl);
+                if (!priceRes.ok) throw new Error(`Elering status ${priceRes.status}`);
+
+                const priceJson = await priceRes.json();
+
+                let avgPrice = 0;
+                let count = 0;
+                if (priceJson.data && priceJson.data.fi) {
+                    priceJson.data.fi.forEach(p => { avgPrice += p.price; count++; });
+                }
+
+                if (count > 0) {
+                    avgPrice = (avgPrice / count) * 1.255 * 0.1;
+                    console.log(`Logataan toteutunut hinta: ${avgPrice.toFixed(2)} snt/kWh`);
+                    return {
+                        date: now.toLocaleDateString('en-CA'),
+                        realized_price: avgPrice, // Distinct key
+                        timestamp: new Date().toISOString()
+                    };
+                }
+                return null;
+            } catch (e) {
+                console.warn("Failed to fetch realized data", e);
+                return null;
+            }
+        }
+
+        function logData(data) {
+            if (!data) return;
+            let history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            const idx = history.findIndex(h => h.date === data.date);
+
+            if (idx >= 0) {
+                history[idx] = { ...history[idx], ...data };
+            } else {
+                history.push(data);
+            }
+
+            history.sort((a, b) => new Date(a.date) - new Date(b.date));
+            localStorage.setItem('history_log', JSON.stringify(history));
+            updateDownloadButtonText();
+        }
+
+        function downloadLoggedData() {
+            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            if (history.length === 0) {
+                alert("Ei tallennettua dataa.");
+                return;
+            }
+
+            // Dynamic Header
+            const allKeys = new Set();
+            history.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
+            // Ensure 'date' is first, then others sorted
+            allKeys.delete('date');
+            const sortedKeys = ['date', ...Array.from(allKeys).sort()];
+
+            const header = sortedKeys.join(',');
+            const rows = history.map(obj => {
+                return sortedKeys.map(k => {
+                    const val = obj[k];
+                    if (val === undefined) return '';
+                    if (typeof val === 'number') return val.toFixed(2);
+                    return val;
+                }).join(',');
+            });
+
+            const csvContent = "data:text/csv;charset=utf-8," + [header, ...rows].join('\n');
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "calibration_data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function mergeData(fingridData, weatherData) {
+            const windByDay = {};
+            fingridData.data.forEach(item => {
+                const d = new Date(item.startTime);
+                const dateStr = d.toLocaleDateString('en-CA');
+                if (!windByDay[dateStr]) windByDay[dateStr] = { sum: 0, count: 0 };
+                windByDay[dateStr].sum += item.value;
+                windByDay[dateStr].count++;
+            });
+
+            const days = weatherData[0].daily.time;
+            const finalData = [];
+
+            days.forEach((dateStr, index) => {
+                if (index < 1 || index > 4) return;
+
+                // Date Check for Weekend
+                const dateObj = new Date(dateStr);
+                const dayOfWeek = dateObj.getDay();
+
+                let avgTemp = 0;
+                weatherData.forEach(loc => {
+                    if (loc.daily.temperature_2m_mean[index] !== null) {
+                        avgTemp += loc.daily.temperature_2m_mean[index];
+                    }
+                });
+                avgTemp /= weatherData.length;
+
+                const windStats = windByDay[dateStr];
+                if (windStats && windStats.count > 0) {
+                    const avgWindPower = windStats.sum / windStats.count;
+
+                    // Model Calc
+                    let rawPrice = MODEL.base_price - (avgWindPower * MODEL.coeff_wind_power) - (avgTemp * MODEL.coeff_temp);
+
+                    // Weekend Adjustment
+                    if (dayOfWeek === 6) rawPrice += MODEL.coeff_weekend_sat;
+                    if (dayOfWeek === 0) rawPrice += MODEL.coeff_weekend_sun;
+
+                    let price = Math.max(MODEL.floor_price, rawPrice);
+
+                    // Log Forecast
+                    logData({
+                        date: dateStr,
+                        predicted_price: price,
+                        predicted_wind_mw: avgWindPower,
+                        predicted_temp: avgTemp
+                    });
+
+                    finalData.push({
+                        date: dateStr,
+                        price: price,
+                        windPower: avgWindPower,
+                        temp: avgTemp
+                    });
+                }
+            });
+
+            return finalData;
+        }
+
+        function renderCards(data) {
+            const container = document.getElementById('cards-container');
+            container.innerHTML = '';
+
+            if (data.length === 0) {
+                container.innerHTML = '<div class="loading">Ei tarpeeksi dataa ennusteen luomiseksi.</div>';
+                return;
+            }
+
+            data.forEach(day => {
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                const dateObj = new Date(day.date);
+                const dayName = dateObj.toLocaleDateString('fi-FI', { weekday: 'long' });
+                const dateStr = dateObj.toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' });
+
+                const priceFormatted = day.price.toFixed(2);
+
+                let priceClass = 'price-mid';
+                if (day.price < 5) priceClass = 'price-low';
+                if (day.price > 15) priceClass = 'price-high';
+
+                card.innerHTML = `
+            <div class="card-header">
+                <span class="date">${dateStr}</span>
+                <span class="weekday">${dayName}</span>
+            </div>
+            <div class="price-container">
+                <div class="price-value ${priceClass}">${priceFormatted}</div>
+                <div class="price-unit">snt/kWh (sis. ALV)</div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Lämpötila</span>
+                    <span class="stat-value">${day.temp.toFixed(1)}°C</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tuulivoima</span>
+                    <span class="stat-value">${Math.round(day.windPower)} MW</span>
+                </div>
+            </div>
+        `;
+
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+
+</html>
