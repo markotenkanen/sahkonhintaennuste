@@ -216,16 +216,15 @@
 
         let apiKey = localStorage.getItem('fingrid_api_key') || '';
 
-        // Model based on heuristics (Refined 15.12.2025 Phase 2 + Weekend Adj)
-        // Target: 4000MW -> 4.2 snt. 2300MW -> 11.0 snt.
-        // Weekends: significant reduction in demand/price.
+        // Model calibrated on 16.–30.12.2025 realized prices (MAE ~0.89 snt)
+        // Linear regression with explicit weekend penalties.
         const MODEL = {
-            base_price: 5.97,
-            coeff_wind_power: 0.00048,
-            coeff_temp: 0.53,
+            base_price: 5.25,
+            coeff_wind_power: -0.000785,
+            coeff_temp: -0.117,
             floor_price: -1.0,
-            coeff_weekend_sat: 0.0,
-            coeff_weekend_sun: 0.0
+            coeff_weekend_sat: -0.60,
+            coeff_weekend_sun: -1.85
         };
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -430,8 +429,10 @@
                 if (windStats && windStats.count > 0) {
                     const avgWindPower = windStats.sum / windStats.count;
 
-                    // Model Calc
-                    let rawPrice = MODEL.base_price - (avgWindPower * MODEL.coeff_wind_power) - (avgTemp * MODEL.coeff_temp);
+                    // Model Calc (signed coefficients)
+                    let rawPrice = MODEL.base_price
+                        + (avgWindPower * MODEL.coeff_wind_power)
+                        + (avgTemp * MODEL.coeff_temp);
 
                     // Weekend Adjustment
                     if (dayOfWeek === 6) rawPrice += MODEL.coeff_weekend_sat;
