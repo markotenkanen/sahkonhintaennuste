@@ -200,9 +200,13 @@
     <footer class="footer">
         <p>Ennuste perustuu historialliseen dataan hinnoista, tuulesta ja lämpötilasta (Helsinki, Tampere, Oulu).</p>
         <p>Malli: Hinta laskee epälineaarisesti tuulivoiman kasvaessa.</p>
-        <button id="download-data"
-            style="margin-top: 1rem; padding: 0.5rem; background: #334155; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Lataa
-            kerätty data (CSV)</button>
+        <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;">
+            <button id="download-data"
+                style="padding: 0.5rem; background: #334155; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Lataa
+                kerätty data (CSV)</button>
+            <button id="open-data-window"
+                style="padding: 0.5rem; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Avaa kerätty data</button>
+        </div>
     </footer>
 
     <script>
@@ -216,15 +220,15 @@
 
         let apiKey = localStorage.getItem('fingrid_api_key') || '';
 
-        // Model calibrated on 16.–30.12.2025 realized prices (MAE ~0.89 snt)
-        // Linear regression with explicit weekend penalties.
+        // Model calibrated on 16.12.2025–4.1.2026 toteutuneilla hinnoilla (MAE ~1.44 snt)
+        // Lineaarinen regressio, jossa viikonloppuun erilliset korjaustermit.
         const MODEL = {
-            base_price: 5.25,
-            coeff_wind_power: -0.000785,
-            coeff_temp: -0.117,
+            base_price: 5.97,
+            coeff_wind_power: -0.000811,
+            coeff_temp: -0.422,
             floor_price: -1.0,
-            coeff_weekend_sat: -0.60,
-            coeff_weekend_sun: -1.85
+            coeff_weekend_sat: 0.44,
+            coeff_weekend_sun: -1.14
         };
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -244,6 +248,7 @@
             });
 
             document.getElementById('download-data').addEventListener('click', downloadLoggedData);
+            document.getElementById('open-data-window').addEventListener('click', openLoggedDataWindow);
 
             updateDownloadButtonText();
         });
@@ -252,6 +257,13 @@
             const history = JSON.parse(localStorage.getItem('history_log') || '[]');
             const btn = document.getElementById('download-data');
             if (btn) btn.textContent = `Lataa kerätty data (CSV) - ${history.length} riviä`;
+        }
+
+        function buildHistoryColumns(history) {
+            const allKeys = new Set();
+            history.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
+            allKeys.delete('date');
+            return ['date', ...Array.from(allKeys).sort()];
         }
 
         async function init() {
@@ -370,12 +382,7 @@
                 return;
             }
 
-            // Dynamic Header
-            const allKeys = new Set();
-            history.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
-            // Ensure 'date' is first, then others sorted
-            allKeys.delete('date');
-            const sortedKeys = ['date', ...Array.from(allKeys).sort()];
+            const sortedKeys = buildHistoryColumns(history);
 
             const header = sortedKeys.join(',');
             const rows = history.map(obj => {
@@ -395,6 +402,53 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        }
+
+        function openLoggedDataWindow() {
+            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            if (history.length === 0) {
+                alert("Ei tallennettua dataa.");
+                return;
+            }
+
+            const sortedKeys = buildHistoryColumns(history);
+            const win = window.open('', '_blank');
+            if (!win) {
+                alert("Ponnahdusikkuna estetty. Salli ponnahdusikkuna nähdäksesi datan.");
+                return;
+            }
+
+            const rows = history.map(obj => {
+                return `<tr>${sortedKeys.map(k => {
+                    const val = obj[k];
+                    if (val === undefined) return '<td></td>';
+                    if (typeof val === 'number') return `<td>${val.toFixed(2)}</td>`;
+                    return `<td>${val}</td>`;
+                }).join('')}</tr>`;
+            }).join('');
+
+            win.document.write(`
+                <html>
+                <head>
+                    <title>Kerätty data</title>
+                    <style>
+                        body { font-family: ${JSON.stringify(getComputedStyle(document.body).fontFamily || 'Arial')}; margin: 20px; color: #0f172a; }
+                        table { border-collapse: collapse; width: 100%; }
+                        th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+                        th { background: #f1f5f9; }
+                        tbody tr:nth-child(even) { background: #f8fafc; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Kerätty data (${history.length} riviä)</h2>
+                    <table>
+                        <thead><tr>${sortedKeys.map(k => `<th>${k}</th>`).join('')}</tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </body>
+                </html>
+            `);
+            win.document.close();
         }
 
         function mergeData(fingridData, weatherData) {
