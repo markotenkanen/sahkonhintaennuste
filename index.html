@@ -220,15 +220,15 @@
 
         let apiKey = localStorage.getItem('fingrid_api_key') || '';
 
-        // Model calibrated on 16.12.2025–4.1.2026 toteutuneilla hinnoilla (MAE ~1.44 snt)
+        // Model calibrated on 16.12.2025–19.1.2026 toteutuneilla hinnoilla (MAE ~2.35 snt)
         // Lineaarinen regressio, jossa viikonloppuun erilliset korjaustermit.
         const MODEL = {
-            base_price: 5.97,
-            coeff_wind_power: -0.000811,
-            coeff_temp: -0.422,
+            base_price: 9.92,
+            coeff_wind_power: -0.001477,
+            coeff_temp: -0.482,
             floor_price: -1.0,
-            coeff_weekend_sat: 0.44,
-            coeff_weekend_sun: -1.14
+            coeff_weekend_sat: -0.02,
+            coeff_weekend_sun: -1.17
         };
 
         document.addEventListener('DOMContentLoaded', () => {
