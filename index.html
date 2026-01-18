@@ -607,7 +607,7 @@
 
         async function fetchRecentHistoryInputs() {
             const now = new Date();
-            const endTime = now.toISOString();
+            const endTime = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
             const startTime = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
             const windUrl = `${FINGRID_API_URL}?startTime=${startTime}&endTime=${endTime}&pageSize=200`;
@@ -627,8 +627,8 @@
                 windByDay[dateStr].count++;
             });
 
-            const recentDates = getRecentDateStrings(2);
-            return recentDates.reduce((acc, dateStr) => {
+            const targetDates = getDateStringsForOffsets([-2, -1, 1, 2, 3]);
+            return targetDates.reduce((acc, dateStr) => {
                 const windStats = windByDay[dateStr];
                 const avgTemp = weatherData[dateStr];
                 if (windStats && windStats.count > 0 && typeof avgTemp === 'number') {
@@ -645,10 +645,10 @@
 
         async function fetchRecentWeatherHistories() {
             const recentTempsByDate = {};
-            const recentDates = getRecentDateStrings(2);
+            const recentDates = getDateStringsForOffsets([-2, -1, 1, 2, 3]);
 
             const promises = LOCATIONS.map(async loc => {
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&past_days=2&forecast_days=1`;
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&past_days=2&forecast_days=3`;
                 const res = await fetch(url);
                 if (!res.ok) throw new Error(`Weather API failed for ${loc.name}`);
                 return await res.json();
@@ -713,6 +713,14 @@
                 dates.push(formatDateHelsinki(date));
             }
             return dates;
+        }
+
+        function getDateStringsForOffsets(offsets) {
+            return offsets.map(offset => {
+                const date = new Date();
+                date.setDate(date.getDate() + offset);
+                return formatDateHelsinki(date);
+            });
         }
 
         function formatDateHelsinki(date) {
