@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0f172a;
+            --bg-color: #ffffff;
             --card-bg: #1e293b;
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
@@ -42,19 +42,20 @@
         header {
             text-align: center;
             margin-bottom: 3rem;
+            color: #0f172a;
         }
 
         h1 {
             font-size: 2.5rem;
             font-weight: 800;
             margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, #fff 0%, var(--accent-color) 100%);
+            background: linear-gradient(135deg, #0f172a 0%, var(--accent-color) 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
         .subtitle {
-            color: var(--text-secondary);
+            color: #475569;
             font-size: 1.1rem;
         }
 
@@ -150,10 +151,105 @@
 
         .footer {
             margin-top: 4rem;
-            color: var(--text-secondary);
+            color: #475569;
             font-size: 0.9rem;
             text-align: center;
             max-width: 600px;
+        }
+
+        .coeff-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+        }
+
+        .coeff-section h2 {
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+            color: #0f172a;
+        }
+
+        .coeff-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .coeff-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            font-size: 0.9rem;
+            color: #0f172a;
+        }
+
+        .coeff-field input {
+            padding: 0.5rem;
+            border-radius: 6px;
+            border: 1px solid #cbd5f5;
+            font-size: 0.95rem;
+        }
+
+        .coeff-actions {
+            margin-top: 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .coeff-actions button {
+            padding: 0.55rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .coeff-save {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        .coeff-reset {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .history-comparison {
+            margin-top: 2rem;
+            padding: 1.25rem;
+            border-radius: 1rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+            color: #0f172a;
+        }
+
+        .history-comparison h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .history-table th,
+        .history-table td {
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem 0.6rem;
+            text-align: left;
+        }
+
+        .history-table th {
+            background: #f1f5f9;
         }
 
         .loading {
@@ -200,9 +296,46 @@
     <footer class="footer">
         <p>Ennuste perustuu historialliseen dataan hinnoista, tuulesta ja lämpötilasta (Helsinki, Tampere, Oulu).</p>
         <p>Malli: Hinta laskee epälineaarisesti tuulivoiman kasvaessa.</p>
-        <button id="download-data"
-            style="margin-top: 1rem; padding: 0.5rem; background: #334155; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Lataa
-            kerätty data (CSV)</button>
+        <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;">
+            <button id="download-data"
+                style="padding: 0.5rem; background: #334155; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Lataa
+                kerätty data (CSV)</button>
+            <button id="open-data-window"
+                style="padding: 0.5rem; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Avaa kerätty data</button>
+        </div>
+        <section class="coeff-section" aria-labelledby="coeff-title">
+            <h2 id="coeff-title">Algoritmin kertoimet</h2>
+            <p>Muokkaa kertoimia ja näet ennusteet heti. Tallenna muokkaukset pysyviksi tai palauta oletukset.</p>
+            <div class="coeff-grid">
+                <label class="coeff-field">Perushinta
+                    <input type="number" step="0.01" id="coeff-base" />
+                </label>
+                <label class="coeff-field">Tuulivoima (MW)
+                    <input type="number" step="0.000001" id="coeff-wind" />
+                </label>
+                <label class="coeff-field">Lämpötila (°C)
+                    <input type="number" step="0.01" id="coeff-temp" />
+                </label>
+                <label class="coeff-field">Lattiataso
+                    <input type="number" step="0.01" id="coeff-floor" />
+                </label>
+                <label class="coeff-field">Lauantai
+                    <input type="number" step="0.01" id="coeff-sat" />
+                </label>
+                <label class="coeff-field">Sunnuntai
+                    <input type="number" step="0.01" id="coeff-sun" />
+                </label>
+            </div>
+            <div class="coeff-actions">
+                <button type="button" class="coeff-save" id="save-coefficients">Tallenna kertoimet</button>
+                <button type="button" class="coeff-reset" id="reset-coefficients">Palauta oletukset</button>
+            </div>
+        </section>
+        <section class="history-comparison" aria-labelledby="history-title">
+            <h3 id="history-title">Viimeiset toteutuneet päivät</h3>
+            <p>Näytetään kaksi edellistä ennustetta ja niiden toteutunut keskivertohinta.</p>
+            <div id="history-comparison-content">Ei vielä toteutuneita päiviä.</div>
+        </section>
     </footer>
 
     <script>
@@ -216,17 +349,19 @@
 
         let apiKey = localStorage.getItem('fingrid_api_key') || '';
 
-        // Model based on heuristics (Refined 15.12.2025 Phase 2 + Weekend Adj)
-        // Target: 4000MW -> 4.2 snt. 2300MW -> 11.0 snt.
-        // Weekends: significant reduction in demand/price.
-        const MODEL = {
-            base_price: 5.97,
-            coeff_wind_power: 0.00048,
-            coeff_temp: 0.53,
+        // Model calibrated on 16.12.2025–19.1.2026 toteutuneilla hinnoilla (MAE ~2.35 snt)
+        // Lineaarinen regressio, jossa viikonloppuun erilliset korjaustermit.
+        const DEFAULT_MODEL = {
+            base_price: 9.92,
+            coeff_wind_power: -0.001477,
+            coeff_temp: -0.482,
             floor_price: -1.0,
-            coeff_weekend_sat: 0.0,
-            coeff_weekend_sun: 0.0
+            coeff_weekend_sat: -0.02,
+            coeff_weekend_sun: -1.17
         };
+
+        let MODEL = loadStoredModel();
+        let cachedForecastInputs = [];
 
         document.addEventListener('DOMContentLoaded', () => {
             const keyInput = document.getElementById('api-key');
@@ -245,14 +380,162 @@
             });
 
             document.getElementById('download-data').addEventListener('click', downloadLoggedData);
+            document.getElementById('open-data-window').addEventListener('click', openLoggedDataWindow);
+            document.getElementById('save-coefficients').addEventListener('click', saveCoefficients);
+            document.getElementById('reset-coefficients').addEventListener('click', resetCoefficients);
+
+            bindCoefficientInputs();
+            syncCoefficientInputs();
 
             updateDownloadButtonText();
+            updateHistoryComparison();
         });
+
+        function loadStoredModel() {
+            const saved = localStorage.getItem('model_coefficients');
+            if (!saved) return { ...DEFAULT_MODEL };
+            try {
+                const parsed = JSON.parse(saved);
+                return {
+                    ...DEFAULT_MODEL,
+                    ...parsed
+                };
+            } catch (error) {
+                console.warn('Invalid stored coefficients, resetting.', error);
+                return { ...DEFAULT_MODEL };
+            }
+        }
+
+        function parseNumber(value) {
+            if (value === '' || value === null || value === undefined) return null;
+            const normalized = value.toString().replace(',', '.');
+            const num = Number(normalized);
+            return Number.isFinite(num) ? num : null;
+        }
+
+        function bindCoefficientInputs() {
+            const inputs = document.querySelectorAll('.coeff-section input');
+            inputs.forEach(input => {
+                input.addEventListener('input', () => {
+                    updateModelFromInputs();
+                    recalculateForecasts();
+                });
+            });
+        }
+
+        function syncCoefficientInputs() {
+            const mapping = {
+                base_price: 'coeff-base',
+                coeff_wind_power: 'coeff-wind',
+                coeff_temp: 'coeff-temp',
+                floor_price: 'coeff-floor',
+                coeff_weekend_sat: 'coeff-sat',
+                coeff_weekend_sun: 'coeff-sun'
+            };
+
+            Object.entries(mapping).forEach(([key, id]) => {
+                const input = document.getElementById(id);
+                if (input) input.value = MODEL[key].toString();
+            });
+        }
+
+        function updateModelFromInputs() {
+            const mapping = {
+                base_price: 'coeff-base',
+                coeff_wind_power: 'coeff-wind',
+                coeff_temp: 'coeff-temp',
+                floor_price: 'coeff-floor',
+                coeff_weekend_sat: 'coeff-sat',
+                coeff_weekend_sun: 'coeff-sun'
+            };
+
+            Object.entries(mapping).forEach(([key, id]) => {
+                const input = document.getElementById(id);
+                if (!input) return;
+                const value = parseNumber(input.value);
+                if (value !== null) {
+                    MODEL[key] = value;
+                }
+            });
+        }
+
+        function saveCoefficients() {
+            localStorage.setItem('model_coefficients', JSON.stringify(MODEL));
+            syncCoefficientInputs();
+        }
+
+        function resetCoefficients() {
+            MODEL = { ...DEFAULT_MODEL };
+            localStorage.removeItem('model_coefficients');
+            syncCoefficientInputs();
+            recalculateForecasts();
+        }
+
+        function recalculateForecasts() {
+            if (!cachedForecastInputs.length) return;
+            const forecast = applyModelToInputs(cachedForecastInputs);
+            renderCards(forecast);
+        }
 
         function updateDownloadButtonText() {
             const history = JSON.parse(localStorage.getItem('history_log') || '[]');
             const btn = document.getElementById('download-data');
             if (btn) btn.textContent = `Lataa kerätty data (CSV) - ${history.length} riviä`;
+        }
+
+        function updateHistoryComparison() {
+            const container = document.getElementById('history-comparison-content');
+            if (!container) return;
+
+            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            const rows = history
+                .filter(item => typeof item.predicted_price === 'number' && typeof item.realized_price === 'number')
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .slice(-2);
+
+            if (rows.length === 0) {
+                container.textContent = 'Ei vielä toteutuneita päiviä.';
+                return;
+            }
+
+            const tableRows = rows.map(item => {
+                const dateLabel = new Date(item.date).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' });
+                const predicted = item.predicted_price.toFixed(2);
+                const realized = item.realized_price.toFixed(2);
+                const delta = (item.realized_price - item.predicted_price).toFixed(2);
+                const deltaLabel = Number(delta) >= 0 ? `+${delta}` : delta;
+                return `
+                    <tr>
+                        <td>${dateLabel}</td>
+                        <td>${predicted} snt/kWh</td>
+                        <td>${realized} snt/kWh</td>
+                        <td>${deltaLabel} snt/kWh</td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Päivä</th>
+                            <th>Ennuste</th>
+                            <th>Toteutunut keskiarvo</th>
+                            <th>Ero</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function buildHistoryColumns(history) {
+            const allKeys = new Set();
+            history.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
+            allKeys.delete('date');
+            return ['date', ...Array.from(allKeys).sort()];
         }
 
         async function init() {
@@ -271,13 +554,14 @@
                     fetchRealizedData()
                 ]);
 
-                const merged = mergeData(windData, weatherData);
+                cachedForecastInputs = mergeData(windData, weatherData);
+                const forecast = applyModelToInputs(cachedForecastInputs);
 
                 if (realizedData) {
                     logData(realizedData);
                 }
 
-                renderCards(merged);
+                renderCards(forecast);
 
             } catch (error) {
                 console.error(error);
@@ -362,6 +646,7 @@
             history.sort((a, b) => new Date(a.date) - new Date(b.date));
             localStorage.setItem('history_log', JSON.stringify(history));
             updateDownloadButtonText();
+            updateHistoryComparison();
         }
 
         function downloadLoggedData() {
@@ -371,12 +656,7 @@
                 return;
             }
 
-            // Dynamic Header
-            const allKeys = new Set();
-            history.forEach(obj => Object.keys(obj).forEach(k => allKeys.add(k)));
-            // Ensure 'date' is first, then others sorted
-            allKeys.delete('date');
-            const sortedKeys = ['date', ...Array.from(allKeys).sort()];
+            const sortedKeys = buildHistoryColumns(history);
 
             const header = sortedKeys.join(',');
             const rows = history.map(obj => {
@@ -396,6 +676,53 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        }
+
+        function openLoggedDataWindow() {
+            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            if (history.length === 0) {
+                alert("Ei tallennettua dataa.");
+                return;
+            }
+
+            const sortedKeys = buildHistoryColumns(history);
+            const win = window.open('', '_blank');
+            if (!win) {
+                alert("Ponnahdusikkuna estetty. Salli ponnahdusikkuna nähdäksesi datan.");
+                return;
+            }
+
+            const rows = history.map(obj => {
+                return `<tr>${sortedKeys.map(k => {
+                    const val = obj[k];
+                    if (val === undefined) return '<td></td>';
+                    if (typeof val === 'number') return `<td>${val.toFixed(2)}</td>`;
+                    return `<td>${val}</td>`;
+                }).join('')}</tr>`;
+            }).join('');
+
+            win.document.write(`
+                <html>
+                <head>
+                    <title>Kerätty data</title>
+                    <style>
+                        body { font-family: ${JSON.stringify(getComputedStyle(document.body).fontFamily || 'Arial')}; margin: 20px; color: #0f172a; }
+                        table { border-collapse: collapse; width: 100%; }
+                        th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+                        th { background: #f1f5f9; }
+                        tbody tr:nth-child(even) { background: #f8fafc; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Kerätty data (${history.length} riviä)</h2>
+                    <table>
+                        <thead><tr>${sortedKeys.map(k => `<th>${k}</th>`).join('')}</tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </body>
+                </html>
+            `);
+            win.document.close();
         }
 
         function mergeData(fingridData, weatherData) {
@@ -430,26 +757,9 @@
                 if (windStats && windStats.count > 0) {
                     const avgWindPower = windStats.sum / windStats.count;
 
-                    // Model Calc
-                    let rawPrice = MODEL.base_price - (avgWindPower * MODEL.coeff_wind_power) - (avgTemp * MODEL.coeff_temp);
-
-                    // Weekend Adjustment
-                    if (dayOfWeek === 6) rawPrice += MODEL.coeff_weekend_sat;
-                    if (dayOfWeek === 0) rawPrice += MODEL.coeff_weekend_sun;
-
-                    let price = Math.max(MODEL.floor_price, rawPrice);
-
-                    // Log Forecast
-                    logData({
-                        date: dateStr,
-                        predicted_price: price,
-                        predicted_wind_mw: avgWindPower,
-                        predicted_temp: avgTemp
-                    });
-
                     finalData.push({
                         date: dateStr,
-                        price: price,
+                        dayOfWeek,
                         windPower: avgWindPower,
                         temp: avgTemp
                     });
@@ -457,6 +767,36 @@
             });
 
             return finalData;
+        }
+
+        function applyModelToInputs(inputs) {
+            return inputs.map(input => {
+                // Model Calc (signed coefficients)
+                let rawPrice = MODEL.base_price
+                    + (input.windPower * MODEL.coeff_wind_power)
+                    + (input.temp * MODEL.coeff_temp);
+
+                // Weekend Adjustment
+                if (input.dayOfWeek === 6) rawPrice += MODEL.coeff_weekend_sat;
+                if (input.dayOfWeek === 0) rawPrice += MODEL.coeff_weekend_sun;
+
+                const price = Math.max(MODEL.floor_price, rawPrice);
+
+                // Log Forecast
+                logData({
+                    date: input.date,
+                    predicted_price: price,
+                    predicted_wind_mw: input.windPower,
+                    predicted_temp: input.temp
+                });
+
+                return {
+                    date: input.date,
+                    price,
+                    windPower: input.windPower,
+                    temp: input.temp
+                };
+            });
         }
 
         function renderCards(data) {
