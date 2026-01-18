@@ -621,7 +621,7 @@
             const windByDay = {};
             windData.data.forEach(item => {
                 const d = new Date(item.startTime);
-                const dateStr = d.toLocaleDateString('en-CA');
+                const dateStr = formatDateHelsinki(d);
                 if (!windByDay[dateStr]) windByDay[dateStr] = { sum: 0, count: 0 };
                 windByDay[dateStr].sum += item.value;
                 windByDay[dateStr].count++;
@@ -691,7 +691,7 @@
                     const timeValue = point.timestamp ?? point.time ?? point.datetime;
                     const dateObj = new Date(timeValue);
                     if (Number.isNaN(dateObj.getTime())) return;
-                    const dateStr = dateObj.toLocaleDateString('en-CA');
+                    const dateStr = formatDateHelsinki(dateObj);
                     totals[dateStr] = (totals[dateStr] || 0) + point.price;
                     counts[dateStr] = (counts[dateStr] || 0) + 1;
                 });
@@ -710,9 +710,18 @@
             for (let i = days; i >= 1; i--) {
                 const date = new Date();
                 date.setDate(date.getDate() - i);
-                dates.push(date.toLocaleDateString('en-CA'));
+                dates.push(formatDateHelsinki(date));
             }
             return dates;
+        }
+
+        function formatDateHelsinki(date) {
+            return new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Europe/Helsinki',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(date);
         }
 
         async function fetchWeatherForecasts() {
