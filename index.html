@@ -219,6 +219,39 @@
             color: #0f172a;
         }
 
+        .history-comparison {
+            margin-top: 2rem;
+            padding: 1.25rem;
+            border-radius: 1rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+            color: #0f172a;
+        }
+
+        .history-comparison h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .history-table th,
+        .history-table td {
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem 0.6rem;
+            text-align: left;
+        }
+
+        .history-table th {
+            background: #f1f5f9;
+        }
+
         .loading {
             display: flex;
             justify-content: center;
@@ -298,6 +331,11 @@
                 <button type="button" class="coeff-reset" id="reset-coefficients">Palauta oletukset</button>
             </div>
         </section>
+        <section class="history-comparison" aria-labelledby="history-title">
+            <h3 id="history-title">Viimeiset toteutuneet päivät</h3>
+            <p>Näytetään kaksi edellistä ennustetta ja niiden toteutunut keskivertohinta.</p>
+            <div id="history-comparison-content">Ei vielä toteutuneita päiviä.</div>
+        </section>
     </footer>
 
     <script>
@@ -350,6 +388,7 @@
             syncCoefficientInputs();
 
             updateDownloadButtonText();
+            updateHistoryComparison();
         });
 
         function loadStoredModel() {
@@ -442,6 +481,54 @@
             const history = JSON.parse(localStorage.getItem('history_log') || '[]');
             const btn = document.getElementById('download-data');
             if (btn) btn.textContent = `Lataa kerätty data (CSV) - ${history.length} riviä`;
+        }
+
+        function updateHistoryComparison() {
+            const container = document.getElementById('history-comparison-content');
+            if (!container) return;
+
+            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            const rows = history
+                .filter(item => typeof item.predicted_price === 'number' && typeof item.realized_price === 'number')
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .slice(-2);
+
+            if (rows.length === 0) {
+                container.textContent = 'Ei vielä toteutuneita päiviä.';
+                return;
+            }
+
+            const tableRows = rows.map(item => {
+                const dateLabel = new Date(item.date).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' });
+                const predicted = item.predicted_price.toFixed(2);
+                const realized = item.realized_price.toFixed(2);
+                const delta = (item.realized_price - item.predicted_price).toFixed(2);
+                const deltaLabel = Number(delta) >= 0 ? `+${delta}` : delta;
+                return `
+                    <tr>
+                        <td>${dateLabel}</td>
+                        <td>${predicted} snt/kWh</td>
+                        <td>${realized} snt/kWh</td>
+                        <td>${deltaLabel} snt/kWh</td>
+                    </tr>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Päivä</th>
+                            <th>Ennuste</th>
+                            <th>Toteutunut keskiarvo</th>
+                            <th>Ero</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            `;
         }
 
         function buildHistoryColumns(history) {
@@ -559,6 +646,7 @@
             history.sort((a, b) => new Date(a.date) - new Date(b.date));
             localStorage.setItem('history_log', JSON.stringify(history));
             updateDownloadButtonText();
+            updateHistoryComparison();
         }
 
         function downloadLoggedData() {
