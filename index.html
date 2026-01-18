@@ -362,6 +362,8 @@
 
         let MODEL = loadStoredModel();
         let cachedForecastInputs = [];
+        let cachedRecentHistoryInputs = [];
+        let cachedRecentRealizedAverages = {};
 
         document.addEventListener('DOMContentLoaded', () => {
             const keyInput = document.getElementById('api-key');
@@ -475,6 +477,7 @@
             if (!cachedForecastInputs.length) return;
             const forecast = applyModelToInputs(cachedForecastInputs);
             renderCards(forecast);
+            updateHistoryComparison();
         }
 
         function updateDownloadButtonText() {
@@ -487,9 +490,17 @@
             const container = document.getElementById('history-comparison-content');
             if (!container) return;
 
-            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
-            const rows = history
-                .filter(item => typeof item.predicted_price === 'number' && typeof item.realized_price === 'number')
+            if (!cachedRecentHistoryInputs.length) {
+                container.textContent = 'Ei vielä toteutuneita päiviä.';
+                return;
+            }
+
+            const rows = cachedRecentHistoryInputs
+                .map(item => ({
+                    ...item,
+                    realized_price: cachedRecentRealizedAverages[item.date]
+                }))
+                .filter(item => typeof item.realized_price === 'number')
                 .sort((a, b) => new Date(a.date) - new Date(b.date))
                 .slice(-2);
 
@@ -500,9 +511,10 @@
 
             const tableRows = rows.map(item => {
                 const dateLabel = new Date(item.date).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' });
-                const predicted = item.predicted_price.toFixed(2);
+                const predictedValue = calculatePriceForInputs(item.windPower, item.temp, new Date(item.date));
+                const predicted = predictedValue.toFixed(2);
                 const realized = item.realized_price.toFixed(2);
-                const delta = (item.realized_price - item.predicted_price).toFixed(2);
+                const delta = (item.realized_price - predictedValue).toFixed(2);
                 const deltaLabel = Number(delta) >= 0 ? `+${delta}` : delta;
                 return `
                     <tr>
@@ -554,6 +566,13 @@
                     fetchRealizedData()
                 ]);
 
+                const [recentHistoryResult, recentRealizedResult] = await Promise.allSettled([
+                    fetchRecentHistoryInputs(),
+                    fetchRecentRealizedAverages()
+                ]);
+                cachedRecentHistoryInputs = recentHistoryResult.status === 'fulfilled' ? recentHistoryResult.value : [];
+                cachedRecentRealizedAverages = recentRealizedResult.status === 'fulfilled' ? recentRealizedResult.value : {};
+
                 cachedForecastInputs = mergeData(windData, weatherData);
                 const forecast = applyModelToInputs(cachedForecastInputs);
 
@@ -562,6 +581,7 @@
                 }
 
                 renderCards(forecast);
+                updateHistoryComparison();
 
             } catch (error) {
                 console.error(error);
@@ -583,6 +603,116 @@
             const res = await fetch(proxyUrl, { headers: { 'x-api-key': apiKey } });
             if (!res.ok) throw new Error(`Fingrid API Error: ${res.status}`);
             return await res.json();
+        }
+
+        async function fetchRecentHistoryInputs() {
+            const now = new Date();
+            const endTime = now.toISOString();
+            const startTime = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+
+            const windUrl = `${FINGRID_API_URL}?startTime=${startTime}&endTime=${endTime}&pageSize=200`;
+            const windProxyUrl = `https://corsproxy.io/?${encodeURIComponent(windUrl)}`;
+            const windRes = await fetch(windProxyUrl, { headers: { 'x-api-key': apiKey } });
+            if (!windRes.ok) throw new Error(`Fingrid API Error: ${windRes.status}`);
+            const windData = await windRes.json();
+
+            const weatherData = await fetchRecentWeatherHistories();
+
+            const windByDay = {};
+            windData.data.forEach(item => {
+                const d = new Date(item.startTime);
+                const dateStr = d.toLocaleDateString('en-CA');
+                if (!windByDay[dateStr]) windByDay[dateStr] = { sum: 0, count: 0 };
+                windByDay[dateStr].sum += item.value;
+                windByDay[dateStr].count++;
+            });
+
+            const recentDates = getRecentDateStrings(2);
+            return recentDates.reduce((acc, dateStr) => {
+                const windStats = windByDay[dateStr];
+                const avgTemp = weatherData[dateStr];
+                if (windStats && windStats.count > 0 && typeof avgTemp === 'number') {
+                    acc.push({
+                        date: dateStr,
+                        dayOfWeek: new Date(dateStr).getDay(),
+                        windPower: windStats.sum / windStats.count,
+                        temp: avgTemp
+                    });
+                }
+                return acc;
+            }, []);
+        }
+
+        async function fetchRecentWeatherHistories() {
+            const recentTempsByDate = {};
+            const recentDates = getRecentDateStrings(2);
+
+            const promises = LOCATIONS.map(async loc => {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&past_days=2&forecast_days=1`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`Weather API failed for ${loc.name}`);
+                return await res.json();
+            });
+
+            const responses = await Promise.all(promises);
+            recentDates.forEach(dateStr => {
+                let sumTemp = 0;
+                let count = 0;
+                responses.forEach(response => {
+                    const dayIndex = response.daily.time.indexOf(dateStr);
+                    if (dayIndex !== -1 && response.daily.temperature_2m_mean[dayIndex] !== null) {
+                        sumTemp += response.daily.temperature_2m_mean[dayIndex];
+                        count++;
+                    }
+                });
+                if (count > 0) {
+                    recentTempsByDate[dateStr] = sumTemp / count;
+                }
+            });
+
+            return recentTempsByDate;
+        }
+
+        async function fetchRecentRealizedAverages() {
+            const now = new Date();
+            const start = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+            const end = now.toISOString();
+            const targetUrl = `https://dashboard.elering.ee/api/nps/price?start=${start}&end=${end}`;
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+            const priceRes = await fetch(proxyUrl);
+            if (!priceRes.ok) throw new Error(`Elering status ${priceRes.status}`);
+            const priceJson = await priceRes.json();
+
+            const totals = {};
+            const counts = {};
+            if (priceJson.data && priceJson.data.fi) {
+                priceJson.data.fi.forEach(point => {
+                    const timeValue = point.timestamp ?? point.time ?? point.datetime;
+                    const dateObj = new Date(timeValue);
+                    if (Number.isNaN(dateObj.getTime())) return;
+                    const dateStr = dateObj.toLocaleDateString('en-CA');
+                    totals[dateStr] = (totals[dateStr] || 0) + point.price;
+                    counts[dateStr] = (counts[dateStr] || 0) + 1;
+                });
+            }
+
+            const averages = {};
+            Object.keys(totals).forEach(dateStr => {
+                const avgPrice = (totals[dateStr] / counts[dateStr]) * 1.255 * 0.1;
+                averages[dateStr] = avgPrice;
+            });
+            return averages;
+        }
+
+        function getRecentDateStrings(days) {
+            const dates = [];
+            for (let i = days; i >= 1; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                dates.push(date.toLocaleDateString('en-CA'));
+            }
+            return dates;
         }
 
         async function fetchWeatherForecasts() {
@@ -772,15 +902,7 @@
         function applyModelToInputs(inputs) {
             return inputs.map(input => {
                 // Model Calc (signed coefficients)
-                let rawPrice = MODEL.base_price
-                    + (input.windPower * MODEL.coeff_wind_power)
-                    + (input.temp * MODEL.coeff_temp);
-
-                // Weekend Adjustment
-                if (input.dayOfWeek === 6) rawPrice += MODEL.coeff_weekend_sat;
-                if (input.dayOfWeek === 0) rawPrice += MODEL.coeff_weekend_sun;
-
-                const price = Math.max(MODEL.floor_price, rawPrice);
+                const price = calculatePriceForInputs(input.windPower, input.temp, input.dayOfWeek);
 
                 // Log Forecast
                 logData({
@@ -797,6 +919,20 @@
                     temp: input.temp
                 };
             });
+        }
+
+        function calculatePriceForInputs(windPower, temp, dayOfWeekOrDate) {
+            const dayOfWeek = dayOfWeekOrDate instanceof Date
+                ? dayOfWeekOrDate.getDay()
+                : dayOfWeekOrDate;
+            let rawPrice = MODEL.base_price
+                + (windPower * MODEL.coeff_wind_power)
+                + (temp * MODEL.coeff_temp);
+
+            if (dayOfWeek === 6) rawPrice += MODEL.coeff_weekend_sat;
+            if (dayOfWeek === 0) rawPrice += MODEL.coeff_weekend_sun;
+
+            return Math.max(MODEL.floor_price, rawPrice);
         }
 
         function renderCards(data) {
