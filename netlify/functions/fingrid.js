@@ -10,7 +10,7 @@ function jsonResponse(statusCode, payload) {
   };
 }
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   if (event.httpMethod !== "GET") {
     return jsonResponse(405, { error: "Method not allowed" });
   }

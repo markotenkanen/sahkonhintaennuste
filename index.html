@@ -397,8 +397,7 @@
             bindCoefficientInputs();
             syncCoefficientInputs();
 
-            updateDownloadButtonText();
-            updateHistoryComparison();
+            refreshHistoryFromServer();
         });
 
         function loadStoredModel() {
@@ -492,6 +491,45 @@
             const history = JSON.parse(localStorage.getItem('history_log') || '[]');
             const btn = document.getElementById('download-data');
             if (btn) btn.textContent = `Lataa kerätty data (CSV) - ${history.length} riviä`;
+        }
+
+        async function refreshHistoryFromServer() {
+            try {
+                const res = await fetch('/.netlify/functions/history');
+                if (!res.ok) {
+                    console.warn('Failed to load history from server.', res.status);
+                    updateHistoryComparison();
+                    return;
+                }
+                const payload = await res.json();
+                const history = Array.isArray(payload.history) ? payload.history : [];
+                localStorage.setItem('history_log', JSON.stringify(history));
+            } catch (error) {
+                console.warn('Failed to load history from server.', error);
+            }
+            updateDownloadButtonText();
+            updateHistoryComparison();
+        }
+
+        async function saveHistoryEntry(entry) {
+            try {
+                const res = await fetch('/.netlify/functions/history', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ entry })
+                });
+                if (!res.ok) {
+                    console.warn('Failed to save history to server.', res.status);
+                    return;
+                }
+                const payload = await res.json();
+                const history = Array.isArray(payload.history) ? payload.history : [];
+                localStorage.setItem('history_log', JSON.stringify(history));
+            } catch (error) {
+                console.warn('Failed to save history to server.', error);
+            }
+            updateDownloadButtonText();
+            updateHistoryComparison();
         }
 
         function updateHistoryComparison() {
@@ -820,6 +858,7 @@
             localStorage.setItem('history_log', JSON.stringify(history));
             updateDownloadButtonText();
             updateHistoryComparison();
+            saveHistoryEntry(data);
         }
 
         function downloadLoggedData() {
