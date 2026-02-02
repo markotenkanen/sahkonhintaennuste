@@ -207,7 +207,8 @@
 
     <script>
         // Constants
-        const FINGRID_API_URL = 'https://data.fingrid.fi/api/datasets/245/data'; // 245 = Wind Power Forecast
+        const FINGRID_API_URL = '/.netlify/functions/fingrid';
+        const ELERING_API_URL = '/.netlify/functions/elering';
         const LOCATIONS = [
             { name: "Helsinki", lat: 60.1695, lon: 24.9354 },
             { name: "Tampere", lat: 61.498, lon: 23.7608 },
@@ -294,16 +295,14 @@
             const startTime = now.toISOString();
             const endTime = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
             const url = `${FINGRID_API_URL}?startTime=${startTime}&endTime=${endTime}&pageSize=200`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-
-            const res = await fetch(proxyUrl, { headers: { 'x-api-key': apiKey } });
+            const res = await fetch(url, { headers: { 'x-api-key': apiKey } });
             if (!res.ok) throw new Error(`Fingrid API Error: ${res.status}`);
             return await res.json();
         }
 
         async function fetchWeatherForecasts() {
             const promises = LOCATIONS.map(async loc => {
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&days=5`;
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&forecast_days=5`;
                 const res = await fetch(url);
                 if (!res.ok) throw new Error(`Weather API failed for ${loc.name}`);
                 return await res.json();
@@ -317,13 +316,9 @@
                 const start = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
                 const end = now.toISOString();
 
-                // Use CORS Proxy for Elering too
-                const targetUrl = `https://dashboard.elering.ee/api/nps/price?start=${start}&end=${end}`;
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-
-                const priceRes = await fetch(proxyUrl);
+                const targetUrl = `${ELERING_API_URL}?start=${start}&end=${end}`;
+                const priceRes = await fetch(targetUrl);
                 if (!priceRes.ok) throw new Error(`Elering status ${priceRes.status}`);
-
                 const priceJson = await priceRes.json();
 
                 let avgPrice = 0;
