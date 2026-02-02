@@ -341,6 +341,14 @@
     <script>
         // Constants
         const FINGRID_API_URL = 'https://data.fingrid.fi/api/datasets/245/data'; // 245 = Wind Power Forecast
+        const PROXY_CANDIDATES = [
+            url => `https://cors.isomorphic-git.org/${url}`,
+            url => `https://thingproxy.freeboard.io/fetch/${url}`,
+            url => `https://corsproxy.io/?${encodeURIComponent(url)}`
+        ];
+        const OPEN_PROXY_CANDIDATES = [
+            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+        ];
         const LOCATIONS = [
             { name: "Helsinki", lat: 60.1695, lon: 24.9354 },
             { name: "Tampere", lat: 61.498, lon: 23.7608 },
@@ -775,6 +783,26 @@
                 console.warn("Failed to fetch realized data", e);
                 return null;
             }
+        }
+
+        async function fetchJsonWithFallback(url, options = {}, proxies = []) {
+            const attempts = [u => u, ...proxies];
+            let lastError;
+
+            for (const proxy of attempts) {
+                try {
+                    const proxiedUrl = proxy(url);
+                    const res = await fetch(proxiedUrl, options);
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status} (${proxiedUrl})`);
+                    }
+                    return await res.json();
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError || new Error('Network request failed');
         }
 
         function logData(data) {
