@@ -207,15 +207,8 @@
 
     <script>
         // Constants
-        const FINGRID_API_URL = 'https://data.fingrid.fi/api/datasets/245/data'; // 245 = Wind Power Forecast
-        const PROXY_CANDIDATES = [
-            url => `https://cors.isomorphic-git.org/${url}`,
-            url => `https://thingproxy.freeboard.io/fetch/${url}`,
-            url => `https://corsproxy.io/?${encodeURIComponent(url)}`
-        ];
-        const OPEN_PROXY_CANDIDATES = [
-            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
-        ];
+        const FINGRID_API_URL = '/.netlify/functions/fingrid';
+        const ELERING_API_URL = '/.netlify/functions/elering';
         const LOCATIONS = [
             { name: "Helsinki", lat: 60.1695, lon: 24.9354 },
             { name: "Tampere", lat: 61.498, lon: 23.7608 },
@@ -302,8 +295,9 @@
             const startTime = now.toISOString();
             const endTime = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
             const url = `${FINGRID_API_URL}?startTime=${startTime}&endTime=${endTime}&pageSize=200`;
-            const res = await fetchJsonWithFallback(url, { headers: { 'x-api-key': apiKey } }, PROXY_CANDIDATES);
-            return res;
+            const res = await fetch(url, { headers: { 'x-api-key': apiKey } });
+            if (!res.ok) throw new Error(`Fingrid API Error: ${res.status}`);
+            return await res.json();
         }
 
         async function fetchWeatherForecasts() {
@@ -322,12 +316,10 @@
                 const start = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
                 const end = now.toISOString();
 
-                const targetUrl = `https://dashboard.elering.ee/api/nps/price?start=${start}&end=${end}`;
-                const priceJson = await fetchJsonWithFallback(
-                    targetUrl,
-                    {},
-                    [...OPEN_PROXY_CANDIDATES, ...PROXY_CANDIDATES]
-                );
+                const targetUrl = `${ELERING_API_URL}?start=${start}&end=${end}`;
+                const priceRes = await fetch(targetUrl);
+                if (!priceRes.ok) throw new Error(`Elering status ${priceRes.status}`);
+                const priceJson = await priceRes.json();
 
                 let avgPrice = 0;
                 let count = 0;
@@ -349,26 +341,6 @@
                 console.warn("Failed to fetch realized data", e);
                 return null;
             }
-        }
-
-        async function fetchJsonWithFallback(url, options = {}, proxies = []) {
-            const attempts = [u => u, ...proxies];
-            let lastError;
-
-            for (const proxy of attempts) {
-                try {
-                    const proxiedUrl = proxy(url);
-                    const res = await fetch(proxiedUrl, options);
-                    if (!res.ok) {
-                        throw new Error(`HTTP ${res.status} (${proxiedUrl})`);
-                    }
-                    return await res.json();
-                } catch (error) {
-                    lastError = error;
-                }
-            }
-
-            throw lastError || new Error('Network request failed');
         }
 
         function logData(data) {
