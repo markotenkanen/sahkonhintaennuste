@@ -603,17 +603,16 @@
                 return acc;
             }, {});
 
-            const realizedMap = {
-                ...getRealizedMapFromHistory(),
-                ...cachedRecentRealizedAverages
-            };
+            const realizedCandidates = Object.keys(cachedRecentRealizedAverages).length
+                ? cachedRecentRealizedAverages
+                : getRealizedMapFromHistory();
 
             const recentInputsByDate = cachedRecentHistoryInputs.reduce((acc, item) => {
                 acc[item.date] = item;
                 return acc;
             }, {});
 
-            const rows = Object.entries(realizedMap)
+            const rows = Object.entries(realizedCandidates)
                 .map(([date, realized_price]) => {
                     const historyEntry = historyByDate[date];
                     const recentInput = recentInputsByDate[date];
@@ -776,7 +775,7 @@
 
         async function fetchRecentWeatherHistories() {
             const recentTempsByDate = {};
-            const recentDates = getDateStringsForOffsets([-2, -1, 1, 2, 3]);
+            const recentDates = getDateStringsForOffsets([-2, -1, 0, 1, 2, 3]);
 
             const promises = LOCATIONS.map(async loc => {
                 const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&past_days=2&forecast_days=3`;
