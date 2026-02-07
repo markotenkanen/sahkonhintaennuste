@@ -758,7 +758,7 @@
                 windByDay[dateStr].count++;
             });
 
-            const targetDates = getDateStringsForOffsets([-2, -1, 1, 2, 3]);
+            const targetDates = getDateStringsForOffsets([-2, -1, 0, 1, 2, 3]);
             return targetDates.reduce((acc, dateStr) => {
                 const windStats = windByDay[dateStr];
                 const avgTemp = weatherData[dateStr];
@@ -814,10 +814,7 @@
             if (!priceRes.ok) throw new Error(`Elering status ${priceRes.status}`);
             const priceJson = await priceRes.json();
 
-            const averages = getDailyAveragesFromPriceData(priceJson);
-            const today = formatDateHelsinki(new Date());
-            delete averages[today];
-            return averages;
+            return getDailyAveragesFromPriceData(priceJson);
         }
 
         function getRecentDateStrings(days) {
@@ -872,8 +869,6 @@
                 const priceJson = await priceRes.json();
 
                 const averages = getDailyAveragesFromPriceData(priceJson);
-                const today = formatDateHelsinki(new Date());
-                delete averages[today];
                 const dates = Object.keys(averages).sort();
                 const latestDate = dates[dates.length - 1];
                 if (latestDate) {
