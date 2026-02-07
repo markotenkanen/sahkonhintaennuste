@@ -612,7 +612,7 @@
                 return acc;
             }, {});
 
-            const rows = Object.entries(realizedCandidates)
+            let rows = Object.entries(realizedCandidates)
                 .map(([date, realized_price]) => {
                     const historyEntry = historyByDate[date];
                     const recentInput = recentInputsByDate[date];
@@ -632,6 +632,24 @@
                 .sort((a, b) => new Date(a.date) - new Date(b.date))
                 .slice(-2);
 
+            if (!rows.length) {
+                rows = Object.keys(recentInputsByDate)
+                    .sort((a, b) => new Date(a) - new Date(b))
+                    .slice(-2)
+                    .map(date => {
+                        const recentInput = recentInputsByDate[date];
+                        const historyEntry = historyByDate[date];
+                        return {
+                            date,
+                            realized_price: realizedCandidates[date] ?? null,
+                            predicted_price: historyEntry?.predicted_price ?? null,
+                            windPower: historyEntry?.predicted_wind_mw ?? recentInput?.windPower ?? null,
+                            temp: historyEntry?.predicted_temp ?? recentInput?.temp ?? null
+                        };
+                    })
+                    .filter(item => Number.isFinite(item.predicted_price) || (Number.isFinite(item.windPower) && Number.isFinite(item.temp)));
+            }
+
             if (rows.length === 0) {
                 container.textContent = 'Ei vielä toteutuneita päiviä.';
                 return;
@@ -643,9 +661,13 @@
                     ? item.predicted_price
                     : calculatePriceForInputs(item.windPower, item.temp, new Date(item.date));
                 const predicted = predictedValue.toFixed(2);
-                const realized = item.realized_price.toFixed(2);
-                const delta = (item.realized_price - predictedValue).toFixed(2);
-                const deltaLabel = Number(delta) >= 0 ? `+${delta}` : delta;
+                const realized = Number.isFinite(item.realized_price) ? item.realized_price.toFixed(2) : '—';
+                const deltaLabel = Number.isFinite(item.realized_price)
+                    ? (() => {
+                        const delta = (item.realized_price - predictedValue).toFixed(2);
+                        return Number(delta) >= 0 ? `+${delta}` : delta;
+                    })()
+                    : '—';
                 return `
                     <tr>
                         <td>${dateLabel}</td>
