@@ -513,8 +513,12 @@
             updateHistoryComparison();
         }
 
+        function getHistoryLog() {
+            return JSON.parse(localStorage.getItem('history_log') || '[]');
+        }
+
         function updateDownloadButtonText() {
-            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            const history = getHistoryLog();
             const btn = document.getElementById('download-data');
             if (btn) btn.textContent = `Lataa kerätty data (CSV) - ${history.length} riviä`;
         }
@@ -558,21 +562,73 @@
             updateHistoryComparison();
         }
 
+        function getRealizedMapFromHistory() {
+            const history = getHistoryLog();
+            return history.reduce((acc, item) => {
+                if (item.date && typeof item.realized_price === 'number') {
+                    acc[item.date] = item.realized_price;
+                }
+                return acc;
+            }, {});
+        }
+
+        function getDailyAveragesFromPriceData(priceJson) {
+            const totals = {};
+            const counts = {};
+            if (priceJson.data && priceJson.data.fi) {
+                priceJson.data.fi.forEach(point => {
+                    const timeValue = point.timestamp ?? point.time ?? point.datetime;
+                    const dateObj = new Date(timeValue);
+                    if (Number.isNaN(dateObj.getTime())) return;
+                    const dateStr = formatDateHelsinki(dateObj);
+                    totals[dateStr] = (totals[dateStr] || 0) + point.price;
+                    counts[dateStr] = (counts[dateStr] || 0) + 1;
+                });
+            }
+            const averages = {};
+            Object.keys(totals).forEach(dateStr => {
+                const avgPrice = (totals[dateStr] / counts[dateStr]) * 1.24 * 0.1;
+                averages[dateStr] = avgPrice;
+            });
+            return averages;
+        }
+
         function updateHistoryComparison() {
             const container = document.getElementById('history-comparison-content');
             if (!container) return;
 
-            if (!cachedRecentHistoryInputs.length) {
-                container.textContent = 'Ei vielä toteutuneita päiviä.';
-                return;
-            }
+            const historyRealized = getRealizedMapFromHistory();
+            const realizedMap = {
+                ...cachedRecentRealizedAverages
+            };
+            Object.entries(historyRealized).forEach(([date, value]) => {
+                if (typeof realizedMap[date] !== 'number') {
+                    realizedMap[date] = value;
+                }
+            });
 
-            const rows = cachedRecentHistoryInputs
+            let rows = cachedRecentHistoryInputs
                 .map(item => ({
                     ...item,
-                    realized_price: cachedRecentRealizedAverages[item.date]
+                    realized_price: realizedMap[item.date]
                 }))
-                .filter(item => typeof item.realized_price === 'number')
+                .filter(item => typeof item.realized_price === 'number');
+
+            if (!rows.length) {
+                const history = getHistoryLog();
+                rows = history
+                    .filter(item => item.date && typeof item.realized_price === 'number')
+                    .map(item => ({
+                        date: item.date,
+                        windPower: item.predicted_wind_mw,
+                        temp: item.predicted_temp,
+                        dayOfWeek: new Date(item.date).getDay(),
+                        realized_price: item.realized_price,
+                        predicted_price: item.predicted_price
+                    }));
+            }
+
+            rows = rows
                 .sort((a, b) => new Date(a.date) - new Date(b.date))
                 .slice(-2);
 
@@ -583,7 +639,9 @@
 
             const tableRows = rows.map(item => {
                 const dateLabel = new Date(item.date).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' });
-                const predictedValue = calculatePriceForInputs(item.windPower, item.temp, new Date(item.date));
+                const predictedValue = typeof item.predicted_price === 'number'
+                    ? item.predicted_price
+                    : calculatePriceForInputs(item.windPower, item.temp, new Date(item.date));
                 const predicted = predictedValue.toFixed(2);
                 const realized = item.realized_price.toFixed(2);
                 const delta = (item.realized_price - predictedValue).toFixed(2);
@@ -747,7 +805,7 @@
 
         async function fetchRecentRealizedAverages() {
             const now = new Date();
-            const start = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+            const start = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
             const end = now.toISOString();
             const proxyUrl = `/.netlify/functions/elering?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
 
@@ -755,24 +813,9 @@
             if (!priceRes.ok) throw new Error(`Elering status ${priceRes.status}`);
             const priceJson = await priceRes.json();
 
-            const totals = {};
-            const counts = {};
-            if (priceJson.data && priceJson.data.fi) {
-                priceJson.data.fi.forEach(point => {
-                    const timeValue = point.timestamp ?? point.time ?? point.datetime;
-                    const dateObj = new Date(timeValue);
-                    if (Number.isNaN(dateObj.getTime())) return;
-                    const dateStr = formatDateHelsinki(dateObj);
-                    totals[dateStr] = (totals[dateStr] || 0) + point.price;
-                    counts[dateStr] = (counts[dateStr] || 0) + 1;
-                });
-            }
-
-            const averages = {};
-            Object.keys(totals).forEach(dateStr => {
-                const avgPrice = (totals[dateStr] / counts[dateStr]) * 1.255 * 0.1;
-                averages[dateStr] = avgPrice;
-            });
+            const averages = getDailyAveragesFromPriceData(priceJson);
+            const today = formatDateHelsinki(new Date());
+            delete averages[today];
             return averages;
         }
 
@@ -816,7 +859,7 @@
         async function fetchRealizedData() {
             try {
                 const now = new Date();
-                const start = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+                const start = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
                 const end = now.toISOString();
 
                 // Use CORS Proxy for Elering too
@@ -827,18 +870,18 @@
 
                 const priceJson = await priceRes.json();
 
-                let avgPrice = 0;
-                let count = 0;
-                if (priceJson.data && priceJson.data.fi) {
-                    priceJson.data.fi.forEach(p => { avgPrice += p.price; count++; });
-                }
-
-                if (count > 0) {
-                    avgPrice = (avgPrice / count) * 1.255 * 0.1;
+                const averages = getDailyAveragesFromPriceData(priceJson);
+                const today = formatDateHelsinki(new Date());
+                delete averages[today];
+                const dates = Object.keys(averages).sort();
+                const latestDate = dates[dates.length - 1];
+                if (latestDate) {
+                    const avgPrice = averages[latestDate];
                     console.log(`Logataan toteutunut hinta: ${avgPrice.toFixed(2)} snt/kWh`);
                     return {
-                        date: now.toLocaleDateString('en-CA'),
-                        realized_price: avgPrice, // Distinct key
+                        date: latestDate,
+                        realized_price: avgPrice,
+                        source: 'elering',
                         timestamp: new Date().toISOString()
                     };
                 }
@@ -871,11 +914,18 @@
 
         function logData(data) {
             if (!data) return;
-            let history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            let history = getHistoryLog();
             const idx = history.findIndex(h => h.date === data.date);
 
             if (idx >= 0) {
-                history[idx] = { ...history[idx], ...data };
+                const existing = history[idx];
+                const shouldPreserveRealized = typeof existing.realized_price === 'number'
+                    && typeof data.realized_price !== 'number';
+                history[idx] = {
+                    ...existing,
+                    ...data,
+                    realized_price: shouldPreserveRealized ? existing.realized_price : data.realized_price
+                };
             } else {
                 history.push(data);
             }
