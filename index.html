@@ -587,7 +587,7 @@
             }
             const averages = {};
             Object.keys(totals).forEach(dateStr => {
-                const avgPrice = (totals[dateStr] / counts[dateStr]) * 1.24 * 0.1;
+                const avgPrice = (totals[dateStr] / counts[dateStr]) * 1.255 * 0.1;
                 averages[dateStr] = avgPrice;
             });
             return averages;
@@ -597,38 +597,39 @@
             const container = document.getElementById('history-comparison-content');
             if (!container) return;
 
-            const historyRealized = getRealizedMapFromHistory();
+            const history = getHistoryLog();
+            const historyByDate = history.reduce((acc, item) => {
+                if (item.date) acc[item.date] = item;
+                return acc;
+            }, {});
+
             const realizedMap = {
+                ...getRealizedMapFromHistory(),
                 ...cachedRecentRealizedAverages
             };
-            Object.entries(historyRealized).forEach(([date, value]) => {
-                if (typeof realizedMap[date] !== 'number') {
-                    realizedMap[date] = value;
-                }
-            });
 
-            let rows = cachedRecentHistoryInputs
-                .map(item => ({
-                    ...item,
-                    realized_price: realizedMap[item.date]
-                }))
-                .filter(item => typeof item.realized_price === 'number');
+            const recentInputsByDate = cachedRecentHistoryInputs.reduce((acc, item) => {
+                acc[item.date] = item;
+                return acc;
+            }, {});
 
-            if (!rows.length) {
-                const history = getHistoryLog();
-                rows = history
-                    .filter(item => item.date && typeof item.realized_price === 'number')
-                    .map(item => ({
-                        date: item.date,
-                        windPower: item.predicted_wind_mw,
-                        temp: item.predicted_temp,
-                        dayOfWeek: new Date(item.date).getDay(),
-                        realized_price: item.realized_price,
-                        predicted_price: item.predicted_price
-                    }));
-            }
-
-            rows = rows
+            const rows = Object.entries(realizedMap)
+                .map(([date, realized_price]) => {
+                    const historyEntry = historyByDate[date];
+                    const recentInput = recentInputsByDate[date];
+                    const predicted_price = historyEntry?.predicted_price ?? null;
+                    const windPower = historyEntry?.predicted_wind_mw ?? recentInput?.windPower ?? null;
+                    const temp = historyEntry?.predicted_temp ?? recentInput?.temp ?? null;
+                    if (!Number.isFinite(realized_price)) return null;
+                    return {
+                        date,
+                        realized_price,
+                        predicted_price,
+                        windPower,
+                        temp
+                    };
+                })
+                .filter(item => item && (Number.isFinite(item.predicted_price) || (Number.isFinite(item.windPower) && Number.isFinite(item.temp))))
                 .sort((a, b) => new Date(a.date) - new Date(b.date))
                 .slice(-2);
 
