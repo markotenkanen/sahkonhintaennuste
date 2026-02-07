@@ -295,7 +295,7 @@
 
     <footer class="footer">
         <p>Ennuste perustuu historialliseen dataan hinnoista, tuulesta ja lämpötilasta (Helsinki, Tampere, Oulu).</p>
-        <p>Malli: Hinta laskee epälineaarisesti tuulivoiman kasvaessa.</p>
+        <p>Malli: Hinta laskee epälineaarisesti tuulivoiman kasvaessa, ja kylmä sekä vähätuulisuus nostavat hintaa.</p>
         <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;">
             <button id="download-data"
                 style="padding: 0.5rem; background: #334155; color: #fff; border: 1px solid #475569; border-radius: 4px; cursor: pointer;">Lataa
@@ -313,8 +313,20 @@
                 <label class="coeff-field">Tuulivoima (MW)
                     <input type="number" step="0.000001" id="coeff-wind" />
                 </label>
+                <label class="coeff-field">Tuulivoima²
+                    <input type="number" step="0.000000001" id="coeff-wind-squared" />
+                </label>
                 <label class="coeff-field">Lämpötila (°C)
                     <input type="number" step="0.01" id="coeff-temp" />
+                </label>
+                <label class="coeff-field">Pakkaslisä
+                    <input type="number" step="0.01" id="coeff-cold" />
+                </label>
+                <label class="coeff-field">Vähätuulisuuskerroin
+                    <input type="number" step="0.01" id="coeff-low-wind" />
+                </label>
+                <label class="coeff-field">Pakkas * vähätuuli
+                    <input type="number" step="0.001" id="coeff-cold-low-wind" />
                 </label>
                 <label class="coeff-field">Lattiataso
                     <input type="number" step="0.01" id="coeff-floor" />
@@ -357,16 +369,22 @@
 
         let apiKey = localStorage.getItem('fingrid_api_key') || '';
 
-        // Model calibrated on 16.12.2025–19.1.2026 toteutuneilla hinnoilla (MAE ~2.35 snt)
-        // Lineaarinen regressio, jossa viikonloppuun erilliset korjaustermit.
+        // Model calibrated on 16.12.2025–7.2.2026 toteutuneilla hinnoilla (MAE ~2.52 snt)
+        // Epälineaarinen regressio, jossa huomioidaan pakkaslisä ja vähätuulisuuden vaikutus.
         const DEFAULT_MODEL = {
-            base_price: 9.92,
-            coeff_wind_power: -0.001477,
-            coeff_temp: -0.482,
-            floor_price: -1.0,
-            coeff_weekend_sat: -0.02,
-            coeff_weekend_sun: -1.17
+            base_price: 15.08,
+            coeff_wind_power: -0.005577,
+            coeff_wind_power_squared: 0.000000541,
+            coeff_temp: -0.149,
+            coeff_cold: 0.538,
+            coeff_low_wind: 2.78,
+            coeff_cold_low_wind: 0.065,
+            floor_price: 0.0,
+            coeff_weekend_sat: 0.63,
+            coeff_weekend_sun: -0.09
         };
+
+        const LOW_WIND_THRESHOLD = 2000;
 
         let MODEL = loadStoredModel();
         let cachedForecastInputs = [];
@@ -436,7 +454,11 @@
             const mapping = {
                 base_price: 'coeff-base',
                 coeff_wind_power: 'coeff-wind',
+                coeff_wind_power_squared: 'coeff-wind-squared',
                 coeff_temp: 'coeff-temp',
+                coeff_cold: 'coeff-cold',
+                coeff_low_wind: 'coeff-low-wind',
+                coeff_cold_low_wind: 'coeff-cold-low-wind',
                 floor_price: 'coeff-floor',
                 coeff_weekend_sat: 'coeff-sat',
                 coeff_weekend_sun: 'coeff-sun'
@@ -452,7 +474,11 @@
             const mapping = {
                 base_price: 'coeff-base',
                 coeff_wind_power: 'coeff-wind',
+                coeff_wind_power_squared: 'coeff-wind-squared',
                 coeff_temp: 'coeff-temp',
+                coeff_cold: 'coeff-cold',
+                coeff_low_wind: 'coeff-low-wind',
+                coeff_cold_low_wind: 'coeff-cold-low-wind',
                 floor_price: 'coeff-floor',
                 coeff_weekend_sat: 'coeff-sat',
                 coeff_weekend_sun: 'coeff-sun'
@@ -487,8 +513,12 @@
             updateHistoryComparison();
         }
 
+        function getHistoryLog() {
+            return JSON.parse(localStorage.getItem('history_log') || '[]');
+        }
+
         function updateDownloadButtonText() {
-            const history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            const history = getHistoryLog();
             const btn = document.getElementById('download-data');
             if (btn) btn.textContent = `Lataa kerätty data (CSV) - ${history.length} riviä`;
         }
@@ -532,23 +562,108 @@
             updateHistoryComparison();
         }
 
+        function getRealizedMapFromHistory() {
+            const history = getHistoryLog();
+            return history.reduce((acc, item) => {
+                if (item.date && typeof item.realized_price === 'number') {
+                    acc[item.date] = item.realized_price;
+                }
+                return acc;
+            }, {});
+        }
+
+        function getDailyAveragesFromPriceData(priceJson) {
+            const totals = {};
+            const counts = {};
+            if (priceJson.data && priceJson.data.fi) {
+                priceJson.data.fi.forEach(point => {
+                    const timeValue = point.timestamp ?? point.time ?? point.datetime;
+                    const dateObj = new Date(timeValue);
+                    if (Number.isNaN(dateObj.getTime())) return;
+                    const dateStr = formatDateHelsinki(dateObj);
+                    totals[dateStr] = (totals[dateStr] || 0) + point.price;
+                    counts[dateStr] = (counts[dateStr] || 0) + 1;
+                });
+            }
+            const averages = {};
+            Object.keys(totals).forEach(dateStr => {
+                const avgPrice = (totals[dateStr] / counts[dateStr]) * 1.255 * 0.1;
+                averages[dateStr] = avgPrice;
+            });
+            return averages;
+        }
+
         function updateHistoryComparison() {
             const container = document.getElementById('history-comparison-content');
             if (!container) return;
 
-            if (!cachedRecentHistoryInputs.length) {
-                container.textContent = 'Ei vielä toteutuneita päiviä.';
-                return;
-            }
+            const history = getHistoryLog();
+            const historyByDate = history.reduce((acc, item) => {
+                if (item.date) acc[item.date] = item;
+                return acc;
+            }, {});
 
-            const rows = cachedRecentHistoryInputs
-                .map(item => ({
-                    ...item,
-                    realized_price: cachedRecentRealizedAverages[item.date]
-                }))
-                .filter(item => typeof item.realized_price === 'number')
+            const realizedCandidates = Object.keys(cachedRecentRealizedAverages).length
+                ? cachedRecentRealizedAverages
+                : getRealizedMapFromHistory();
+
+            const recentInputsByDate = cachedRecentHistoryInputs.reduce((acc, item) => {
+                acc[item.date] = item;
+                return acc;
+            }, {});
+
+            let rows = Object.entries(realizedCandidates)
+                .map(([date, realized_price]) => {
+                    const historyEntry = historyByDate[date];
+                    const recentInput = recentInputsByDate[date];
+                    const predicted_price = historyEntry?.predicted_price ?? null;
+                    const windPower = historyEntry?.predicted_wind_mw ?? recentInput?.windPower ?? null;
+                    const temp = historyEntry?.predicted_temp ?? recentInput?.temp ?? null;
+                    if (!Number.isFinite(realized_price)) return null;
+                    return {
+                        date,
+                        realized_price,
+                        predicted_price,
+                        windPower,
+                        temp
+                    };
+                })
+                .filter(item => item && (Number.isFinite(item.predicted_price) || (Number.isFinite(item.windPower) && Number.isFinite(item.temp))))
                 .sort((a, b) => new Date(a.date) - new Date(b.date))
                 .slice(-2);
+
+            if (!rows.length) {
+                rows = Object.keys(recentInputsByDate)
+                    .sort((a, b) => new Date(a) - new Date(b))
+                    .slice(-2)
+                    .map(date => {
+                        const recentInput = recentInputsByDate[date];
+                        const historyEntry = historyByDate[date];
+                        return {
+                            date,
+                            realized_price: realizedCandidates[date] ?? null,
+                            predicted_price: historyEntry?.predicted_price ?? null,
+                            windPower: historyEntry?.predicted_wind_mw ?? recentInput?.windPower ?? null,
+                            temp: historyEntry?.predicted_temp ?? recentInput?.temp ?? null
+                        };
+                    })
+                    .filter(item => Number.isFinite(item.predicted_price) || (Number.isFinite(item.windPower) && Number.isFinite(item.temp)));
+            }
+
+            if (!rows.length) {
+                rows = Object.values(historyByDate)
+                    .filter(item => item.date)
+                    .sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .slice(-2)
+                    .map(item => ({
+                        date: item.date,
+                        realized_price: Number.isFinite(item.realized_price) ? item.realized_price : null,
+                        predicted_price: Number.isFinite(item.predicted_price) ? item.predicted_price : null,
+                        windPower: Number.isFinite(item.predicted_wind_mw) ? item.predicted_wind_mw : null,
+                        temp: Number.isFinite(item.predicted_temp) ? item.predicted_temp : null
+                    }))
+                    .filter(item => Number.isFinite(item.predicted_price) || (Number.isFinite(item.windPower) && Number.isFinite(item.temp)));
+            }
 
             if (rows.length === 0) {
                 container.textContent = 'Ei vielä toteutuneita päiviä.';
@@ -557,11 +672,17 @@
 
             const tableRows = rows.map(item => {
                 const dateLabel = new Date(item.date).toLocaleDateString('fi-FI', { day: 'numeric', month: 'numeric' });
-                const predictedValue = calculatePriceForInputs(item.windPower, item.temp, new Date(item.date));
+                const predictedValue = typeof item.predicted_price === 'number'
+                    ? item.predicted_price
+                    : calculatePriceForInputs(item.windPower, item.temp, new Date(item.date));
                 const predicted = predictedValue.toFixed(2);
-                const realized = item.realized_price.toFixed(2);
-                const delta = (item.realized_price - predictedValue).toFixed(2);
-                const deltaLabel = Number(delta) >= 0 ? `+${delta}` : delta;
+                const realized = Number.isFinite(item.realized_price) ? item.realized_price.toFixed(2) : '—';
+                const deltaLabel = Number.isFinite(item.realized_price)
+                    ? (() => {
+                        const delta = (item.realized_price - predictedValue).toFixed(2);
+                        return Number(delta) >= 0 ? `+${delta}` : delta;
+                    })()
+                    : '—';
                 return `
                     <tr>
                         <td>${dateLabel}</td>
@@ -673,7 +794,7 @@
                 windByDay[dateStr].count++;
             });
 
-            const targetDates = getDateStringsForOffsets([-2, -1, 1, 2, 3]);
+            const targetDates = getDateStringsForOffsets([-2, -1, 0, 1, 2, 3]);
             return targetDates.reduce((acc, dateStr) => {
                 const windStats = windByDay[dateStr];
                 const avgTemp = weatherData[dateStr];
@@ -691,7 +812,7 @@
 
         async function fetchRecentWeatherHistories() {
             const recentTempsByDate = {};
-            const recentDates = getDateStringsForOffsets([-2, -1, 1, 2, 3]);
+            const recentDates = getDateStringsForOffsets([-2, -1, 0, 1, 2, 3]);
 
             const promises = LOCATIONS.map(async loc => {
                 const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&daily=temperature_2m_mean&timezone=Europe%2FHelsinki&past_days=2&forecast_days=3`;
@@ -721,7 +842,7 @@
 
         async function fetchRecentRealizedAverages() {
             const now = new Date();
-            const start = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+            const start = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
             const end = now.toISOString();
             const proxyUrl = `/.netlify/functions/elering?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
 
@@ -729,25 +850,7 @@
             if (!priceRes.ok) throw new Error(`Elering status ${priceRes.status}`);
             const priceJson = await priceRes.json();
 
-            const totals = {};
-            const counts = {};
-            if (priceJson.data && priceJson.data.fi) {
-                priceJson.data.fi.forEach(point => {
-                    const timeValue = point.timestamp ?? point.time ?? point.datetime;
-                    const dateObj = new Date(timeValue);
-                    if (Number.isNaN(dateObj.getTime())) return;
-                    const dateStr = formatDateHelsinki(dateObj);
-                    totals[dateStr] = (totals[dateStr] || 0) + point.price;
-                    counts[dateStr] = (counts[dateStr] || 0) + 1;
-                });
-            }
-
-            const averages = {};
-            Object.keys(totals).forEach(dateStr => {
-                const avgPrice = (totals[dateStr] / counts[dateStr]) * 1.255 * 0.1;
-                averages[dateStr] = avgPrice;
-            });
-            return averages;
+            return getDailyAveragesFromPriceData(priceJson);
         }
 
         function getRecentDateStrings(days) {
@@ -790,7 +893,7 @@
         async function fetchRealizedData() {
             try {
                 const now = new Date();
-                const start = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+                const start = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
                 const end = now.toISOString();
 
                 // Use CORS Proxy for Elering too
@@ -801,18 +904,16 @@
 
                 const priceJson = await priceRes.json();
 
-                let avgPrice = 0;
-                let count = 0;
-                if (priceJson.data && priceJson.data.fi) {
-                    priceJson.data.fi.forEach(p => { avgPrice += p.price; count++; });
-                }
-
-                if (count > 0) {
-                    avgPrice = (avgPrice / count) * 1.255 * 0.1;
+                const averages = getDailyAveragesFromPriceData(priceJson);
+                const dates = Object.keys(averages).sort();
+                const latestDate = dates[dates.length - 1];
+                if (latestDate) {
+                    const avgPrice = averages[latestDate];
                     console.log(`Logataan toteutunut hinta: ${avgPrice.toFixed(2)} snt/kWh`);
                     return {
-                        date: now.toLocaleDateString('en-CA'),
-                        realized_price: avgPrice, // Distinct key
+                        date: latestDate,
+                        realized_price: avgPrice,
+                        source: 'elering',
                         timestamp: new Date().toISOString()
                     };
                 }
@@ -845,11 +946,18 @@
 
         function logData(data) {
             if (!data) return;
-            let history = JSON.parse(localStorage.getItem('history_log') || '[]');
+            let history = getHistoryLog();
             const idx = history.findIndex(h => h.date === data.date);
 
             if (idx >= 0) {
-                history[idx] = { ...history[idx], ...data };
+                const existing = history[idx];
+                const shouldPreserveRealized = typeof existing.realized_price === 'number'
+                    && typeof data.realized_price !== 'number';
+                history[idx] = {
+                    ...existing,
+                    ...data,
+                    realized_price: shouldPreserveRealized ? existing.realized_price : data.realized_price
+                };
             } else {
                 history.push(data);
             }
@@ -1007,9 +1115,15 @@
             const dayOfWeek = dayOfWeekOrDate instanceof Date
                 ? dayOfWeekOrDate.getDay()
                 : dayOfWeekOrDate;
+            const cold = Math.max(0, -temp);
+            const lowWindFactor = Math.max(0, Math.min(1, (LOW_WIND_THRESHOLD - windPower) / LOW_WIND_THRESHOLD));
             let rawPrice = MODEL.base_price
                 + (windPower * MODEL.coeff_wind_power)
-                + (temp * MODEL.coeff_temp);
+                + (windPower * windPower * MODEL.coeff_wind_power_squared)
+                + (temp * MODEL.coeff_temp)
+                + (cold * MODEL.coeff_cold)
+                + (lowWindFactor * MODEL.coeff_low_wind)
+                + (cold * lowWindFactor * MODEL.coeff_cold_low_wind);
 
             if (dayOfWeek === 6) rawPrice += MODEL.coeff_weekend_sat;
             if (dayOfWeek === 0) rawPrice += MODEL.coeff_weekend_sun;
